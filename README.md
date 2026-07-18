@@ -1,6 +1,7 @@
 # LiveMonitor
 
 > 一款轻量级的跨平台直播主播开播监控桌面插件，支持系统托盘后台运行。
+> (release下载LiveMonitor.exe直接开始使用)
 
 ---
 
