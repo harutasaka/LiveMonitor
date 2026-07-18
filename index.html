@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LiveMonitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; border-radius: 10px; }
+        
+        #app-bg {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(16, 16, 22, 0.94);
+            z-index: -1;
+            border-radius: 10px;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            border-radius: 10px;
+            user-select: none;
+        }
+
+        .title-bar {
+            -webkit-app-region: drag;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px 0 14px;
+            background: rgba(0, 0, 0, 0.5);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
+        }
+        .title-text {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.9);
+        }
+        
+        .window-controls {
+            -webkit-app-region: no-drag;
+            display: flex; align-items: center; gap: 4px;
+        }
+        .win-btn {
+            width: 26px; height: 26px; border-radius: 6px; border: none;
+            background: transparent; color: rgba(255,255,255,0.55);
+            font-size: 14px; cursor: pointer; transition: all 0.15s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .win-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+        .win-btn.close:hover { background: #e81123; color: #fff; }
+        .win-btn.pinned { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+
+        .search-bar {
+            -webkit-app-region: no-drag;
+            padding: 10px 12px; display: flex; gap: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex-shrink: 0;
+        }
+        .search-bar input {
+            flex: 1; height: 34px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px; padding: 0 12px;
+            color: #fff; font-size: 13px; outline: none;
+        }
+        .search-bar input::placeholder { color: rgba(255,255,255,0.3); }
+        #addBtn {
+            width: 34px; height: 34px; border-radius: 8px; border: none;
+            background: rgba(0, 255, 136, 0.12); color: #00ff88;
+            font-size: 20px; cursor: pointer;
+        }
+        #addBtn:hover { background: rgba(0, 255, 136, 0.25); }
+
+        .streamer-list { flex: 1; overflow-y: auto; padding: 8px 10px; }
+        .streamer-item {
+            display: flex; align-items: center;
+            padding: 9px 11px; margin-bottom: 5px;
+            background: rgba(255,255,255,0.035);
+            border-radius: 10px; cursor: pointer;
+            transition: all 0.2s;
+            -webkit-app-region: no-drag;
+        }
+        .streamer-item:hover { background: rgba(255,255,255,0.08); }
+        .avatar-wrap { position: relative; margin-right: 11px; flex-shrink: 0; }
+        .avatar-wrap img {
+            width: 44px; height: 44px; border-radius: 50%;
+            object-fit: cover; border: 2px solid rgba(255,255,255,0.06);
+            display: block; background: rgba(255,255,255,0.05);
+        }
+        
+        /* ========== 状态圆点（关键修复）========== */
+        .status-dot {
+            position: absolute; bottom: 0; right: 0;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #ff4444;           /* 默认红色 = 未开播 */
+            border: 2.5px solid rgba(16, 16, 22, 0.95);
+            transition: all 0.3s;
+        }
+        .status-dot.live { 
+            background: #00ff88;           /* 绿色 = 直播中 */
+            box-shadow: 0 0 8px rgba(0,255,136,0.5); 
+        }
+        .status-dot.network-error { 
+            background: #888888;            /* 灰色 = 网络异常/检测失败 */
+        }
+
+        .streamer-info { flex: 1; min-width: 0; }
+        .streamer-name { font-size: 13.5px; font-weight: 500; color: rgba(255,255,255,0.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .streamer-meta { font-size: 11px; color: rgba(255,255,255,0.38); }
+
+        .delete-btn {
+            width: 28px; height: 28px; border-radius: 6px; border: none;
+            background: transparent; color: rgba(255,255,255,0.25);
+            font-size: 17px; cursor: pointer; opacity: 0; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .streamer-item:hover .delete-btn { opacity: 1; }
+        .delete-btn:hover { background: rgba(255, 68, 68, 0.15); color: #ff4444; }
+
+        .empty-state { text-align: center; padding: 50px 20px; color: rgba(255,255,255,0.2); font-size: 13px; }
+
+        .streamer-list::-webkit-scrollbar { width: 3px; }
+        .streamer-list::-webkit-scrollbar-track { background: transparent; }
+        .streamer-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1000;
+        }
+        .modal.active { display: flex; }
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.70);
+        }
+        .modal-content {
+            position: relative;
+            margin: auto;
+            background: rgba(28, 28, 34, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 22px;
+            width: 260px;
+            z-index: 1001;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+        }
+        .modal-content h3 {
+            margin-bottom: 14px;
+            font-size: 15px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.92);
+            font-weight: 600;
+        }
+        .modal-content input,
+        .modal-content select {
+            width: 100%; height: 38px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px; padding: 0 11px;
+            color: #fff; margin-bottom: 9px;
+            font-size: 13px; outline: none;
+        }
+        .modal-content select option { background: #1c1c22; color: #fff; }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .modal-buttons button {
+            flex: 1; height: 38px;
+            border-radius: 8px; border: none;
+            cursor: pointer; font-size: 13px;
+            font-weight: 500; transition: all 0.2s;
+        }
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.07);
+            color: rgba(255, 255, 255, 0.65);
+        }
+        .btn-cancel:hover { background: rgba(255, 255, 255, 0.14); }
+        .btn-primary {
+            background: rgba(0, 255, 136, 0.85);
+            color: #000;
+        }
+        .btn-primary:hover { background: rgba(0, 255, 136, 1); }
+        .btn-danger {
+            background: rgba(255, 68, 68, 0.85);
+            color: #fff;
+        }
+        .btn-danger:hover { background: rgba(255, 68, 68, 1); }
+
+        .hint {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-top: -6px;
+            margin-bottom: 10px;
+        }
+        
+        .delete-modal .modal-content {
+            width: 240px;
+            text-align: center;
+            padding: 28px 22px 22px;
+        }
+        .delete-modal .modal-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+            line-height: 1;
+        }
+        .delete-modal .modal-text {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.85);
+            margin-bottom: 22px;
+            line-height: 1.5;
+        }
+        .delete-modal .modal-buttons { margin-top: 0; }
+
+        .settings-modal .modal-content {
+            width: 280px;
+            padding: 20px 22px;
+        }
+        
+        .settings-row {
+            display: flex;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            gap: 16px;
+        }
+        .settings-row:last-child { border-bottom: none; }
+        
+        .settings-row > div:first-child {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .settings-label {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.85);
+            white-space: nowrap;
+            line-height: 1;
+        }
+        
+        .toggle {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: background 0.3s;
+            flex: 0 0 40px;
+        }
+        .toggle.active {
+            background: rgba(0, 255, 136, 0.8);
+        }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        .toggle.active::after {
+            transform: translateX(18px);
+        }
+        
+        .lang-select {
+            width: 90px;
+            min-width: 90px;
+            max-width: 90px;
+            flex: 0 0 90px;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 0 8px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+        .lang-select option {
+            background: #1c1c22;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-bg"></div>
+
+    <div class="title-bar">
+        <span class="title-text" id="titleText">LiveMonitor</span>
+        <div class="window-controls">
+            <button class="win-btn" id="settingsBtn" title="Settings">⚙️</button>
+            <button class="win-btn" id="pinBtn" title="Pin/Unpin">📌</button>
+            <button class="win-btn" id="minBtn" title="Minimize">−</button>
+            <button class="win-btn close" id="closeBtn" title="Close">×</button>
+        </div>
+    </div>
+
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search streamer...">
+        <button id="addBtn" title="Add streamer">+</button>
+    </div>
+
+    <div id="streamerList" class="streamer-list">
+        <div class="empty-state" id="emptyText">No streamers, click + to add</div>
+    </div>
+
+    <!-- Add Streamer Modal -->
+    <div id="addModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddModal()"></div>
+        <div class="modal-content">
+            <h3 id="addTitle">Add Streamer</h3>
+            <select id="platformSelect">
+                <option value="bilibili">Bilibili</option>
+                <option value="douyu">Douyu</option>
+                <option value="huya">Huya</option>
+                <option value="other">Other</option>
+            </select>
+            <input type="text" id="roomIdInput" placeholder="Room ID">
+            <div class="hint" id="addHint">Leave empty to auto-fetch name and avatar</div>
+            <input type="text" id="nameInput" placeholder="Streamer name (optional, auto-fetch if empty)">
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeAddModal()" id="addCancel">Cancel</button>
+                <button class="btn-primary" id="confirmBtn">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div id="deleteModal" class="modal delete-modal">
+        <div class="modal-overlay" onclick="closeDeleteModal()"></div>
+        <div class="modal-content">
+            <div class="modal-icon">🗑️</div>
+            <div class="modal-text" id="deleteText">Delete this streamer?</div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeDeleteModal()" id="delCancel">Cancel</button>
+                <button class="btn-danger" id="confirmDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal settings-modal">
+        <div class="modal-overlay" onclick="closeSettingsModal()"></div>
+        <div class="modal-content">
+            <h3 id="settingsTitle">Settings</h3>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label" id="autoStartLabel">Launch on system startup</div>
+                </div>
+                <div class="toggle" id="autoStartToggle"></div>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label" id="languageLabel">Language</div>
+                </div>
+                <select class="lang-select" id="langSelect">
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                </select>
+            </div>
+            <div class="modal-buttons" style="margin-top: 14px;">
+                <button class="btn-primary" onclick="closeSettingsModal()" id="settingsDone">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== I18N ====================
+        const i18n = {
+            en: {
+                searchPlaceholder: 'Search streamer...',
+                emptyState: 'No streamers, click + to add',
+                addTitle: 'Add Streamer',
+                roomId: 'Room ID',
+                streamerName: 'Streamer name (optional, auto-fetch if empty)',
+                hint: 'Leave empty to auto-fetch name and avatar',
+                cancel: 'Cancel',
+                add: 'Add',
+                deleteConfirm: 'Delete streamer "{name}"?',
+                delete: 'Delete',
+                settings: 'Settings',
+                autoStart: 'Launch on system startup',
+                language: 'Language',
+                done: 'Done',
+                pinTitlePinned: 'Pinned (click to unpin)',
+                pinTitleUnpinned: 'Show on desktop only (click to pin)',
+                minTitle: 'Minimize',
+                closeTitle: 'Close',
+                bilibili: 'Bilibili',
+                douyu: 'Douyu',
+                huya: 'Huya',
+                other: 'Other',
+                roomLabel: 'Room'
+            },
+            zh: {
+                searchPlaceholder: '搜索主播名称...',
+                emptyState: '暂无主播，点击 + 添加',
+                addTitle: '添加主播',
+                roomId: '房间 ID',
+                streamerName: '主播名称（可选，留空自动获取）',
+                hint: '留空将自动获取名字和头像',
+                cancel: '取消',
+                add: '添加',
+                deleteConfirm: '确定删除主播「{name}」吗？',
+                delete: '删除',
+                settings: '设置',
+                autoStart: '开机自启动',
+                language: '语言',
+                done: '完成',
+                pinTitlePinned: '已置顶（点击取消）',
+                pinTitleUnpinned: '仅桌面显示（点击置顶）',
+                minTitle: '最小化',
+                closeTitle: '关闭',
+                bilibili: '哔哩哔哩',
+                douyu: '斗鱼',
+                huya: '虎牙',
+                other: '其他',
+                roomLabel: '房间'
+            }
+        };
+
+        let currentLang = 'en';
+        function t(key) {
+            const dict = i18n[currentLang];
+            if (dict && dict[key] !== undefined) return dict[key];
+            return i18n['en'][key] || key;
+        }
+
+        // ==================== DOM Refs ====================
+        const streamerList = document.getElementById('streamerList');
+        const searchInput = document.getElementById('searchInput');
+        const addBtn = document.getElementById('addBtn');
+        const addModal = document.getElementById('addModal');
+        const deleteModal = document.getElementById('deleteModal');
+        const deleteText = document.getElementById('deleteText');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        const platformSelect = document.getElementById('platformSelect');
+        const roomIdInput = document.getElementById('roomIdInput');
+        const nameInput = document.getElementById('nameInput');
+        const pinBtn = document.getElementById('pinBtn');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const autoStartToggle = document.getElementById('autoStartToggle');
+        const langSelect = document.getElementById('langSelect');
+
+        let allStreamers = [];
+        let searchQuery = '';
+        let pendingDeleteId = null;
+        let appSettings = { language: 'en', autoStart: false };
+
+        const platforms = {
+            bilibili: { name: 'Bilibili', baseUrl: 'https://live.bilibili.com/' },
+            douyu: { name: 'Douyu', baseUrl: 'https://www.douyu.com/' },
+            huya: { name: 'Huya', baseUrl: 'https://www.huya.com/' },
+            other: { name: 'Other', baseUrl: '' }
+        };
+
+        // ==================== Safe DOM Update Helper ====================
+        function setText(id, key) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = t(key);
+        }
+
+        function setPlaceholder(id, key) {
+            const el = document.getElementById(id);
+            if (el) el.placeholder = t(key);
+        }
+
+        function setTitle(id, key) {
+            const el = document.getElementById(id);
+            if (el) el.title = t(key);
+        }
+
+        // ==================== Apply Language ====================
+        function applyLanguage() {
+            currentLang = appSettings.language || 'en';
+            langSelect.value = currentLang;
+
+            platforms.bilibili.name = t('bilibili');
+            platforms.douyu.name = t('douyu');
+            platforms.huya.name = t('huya');
+            platforms.other.name = t('other');
+
+            for (let i = 0; i < platformSelect.options.length; i++) {
+                const val = platformSelect.options[i].value;
+                platformSelect.options[i].textContent = t(val);
+            }
+
+            setPlaceholder('searchInput', 'searchPlaceholder');
+            setText('emptyText', 'emptyState');
+
+            setText('addTitle', 'addTitle');
+            setText('addHint', 'hint');
+            setPlaceholder('roomIdInput', 'roomId');
+            setPlaceholder('nameInput', 'streamerName');
+            setText('addCancel', 'cancel');
+            setText('confirmBtn', 'add');
+
+            setText('delCancel', 'cancel');
+            setText('confirmDeleteBtn', 'delete');
+
+            setText('settingsTitle', 'settings');
+            setText('autoStartLabel', 'autoStart');
+            setText('languageLabel', 'language');
+            setText('settingsDone', 'done');
+
+            setTitle('settingsBtn', 'settings');
+            setTitle('minBtn', 'minTitle');
+            setTitle('closeBtn', 'closeTitle');
+
+            renderList();
+        }
+
+        // ==================== Settings Logic ====================
+        async function loadSettings() {
+            try {
+                appSettings = await window.electronAPI.getSettings();
+            } catch (e) {
+                appSettings = { language: 'en', autoStart: false };
+            }
+            applyLanguage();
+            autoStartToggle.classList.toggle('active', appSettings.autoStart);
+        }
+
+        async function saveSettings() {
+            await window.electronAPI.setSettings(appSettings);
+        }
+
+        settingsBtn.addEventListener('click', () => {
+            applyLanguage();
+            settingsModal.classList.add('active');
+        });
+
+        function closeSettingsModal() {
+            settingsModal.classList.remove('active');
+        }
+
+        autoStartToggle.addEventListener('click', async () => {
+            appSettings.autoStart = !appSettings.autoStart;
+            autoStartToggle.classList.toggle('active', appSettings.autoStart);
+            await saveSettings();
+        });
+
+        langSelect.addEventListener('change', async () => {
+            appSettings.language = langSelect.value;
+            applyLanguage();
+            await saveSettings();
+        });
+
+        // ==================== Streamer List ====================
+        async function loadStreamers() {
+            try {
+                allStreamers = await window.electronAPI.getStreamers();
+                renderList();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderList() {
+            let list = allStreamers;
+            if (searchQuery) {
+                list = allStreamers.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
+            }
+
+            streamerList.innerHTML = '';
+            if (list.length === 0) {
+                const emptyText = searchQuery ? (currentLang === 'zh' ? '无匹配结果' : 'No matches') : t('emptyState');
+                streamerList.innerHTML = '<div class="empty-state">' + emptyText + '</div>';
+                return;
+            }
+            list.forEach(s => {
+                const p = platforms[s.platform] || platforms.other;
+                const url = s.url || (p.baseUrl ? p.baseUrl + s.roomId : '');
+                const avatar = s.avatar && s.avatar.trim()
+                    ? s.avatar
+                    : 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(s.name) + '&backgroundColor=2a2a35&textColor=ffffff';
+
+                // ========== 关键修复：网络异常时显示灰色圆点 ==========
+                let statusClass = '';
+                if (s.isLive === true) {
+                    statusClass = 'live';
+                } else if (s.isLive === null) {
+                    statusClass = 'network-error';
+                }
+                // isLive === false 时无额外 class，默认红色
+
+                const el = document.createElement('div');
+                el.className = 'streamer-item';
+                el.innerHTML = '<div class="avatar-wrap" onclick="openUrl(\'' + url + '\')">' +
+                    '<img src="' + avatar + '" onerror="this.src=\'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(s.name) + '&backgroundColor=2a2a35&textColor=ffffff\'" alt="">' +
+                    '<div class="status-dot ' + statusClass + '"></div>' +
+                    '</div>' +
+                    '<div class="streamer-info" onclick="openUrl(\'' + url + '\')">' +
+                    '<div class="streamer-name">' + s.name + '</div>' +
+                    '<div class="streamer-meta">' + p.name + ' · ' + t('roomLabel') + ' ' + s.roomId + '</div>' +
+                    '</div>' +
+                    '<button class="delete-btn" onclick="event.stopPropagation(); showDeleteConfirm(\'' + s.id + '\', \'' + s.name.replace(/'/g, "\\'") + '\')" title="' + t('delete') + '">×</button>';
+                streamerList.appendChild(el);
+            });
+        }
+
+        function openUrl(url) { if (url) window.electronAPI.openUrl(url); }
+
+        function showDeleteConfirm(id, name) {
+            pendingDeleteId = id;
+            deleteText.textContent = t('deleteConfirm').replace('{name}', name);
+            deleteModal.classList.add('active');
+        }
+
+        function closeDeleteModal() {
+            deleteModal.classList.remove('active');
+            pendingDeleteId = null;
+        }
+
+        async function doDelete() {
+            if (!pendingDeleteId) return;
+            allStreamers = await window.electronAPI.removeStreamer(pendingDeleteId);
+            closeDeleteModal();
+            renderList();
+        }
+
+        confirmDeleteBtn.addEventListener('click', doDelete);
+
+        searchInput.addEventListener('input', e => {
+            searchQuery = e.target.value.trim();
+            renderList();
+        });
+
+        addBtn.addEventListener('click', () => {
+            addModal.classList.add('active');
+            roomIdInput.focus();
+        });
+
+        function closeAddModal() {
+            addModal.classList.remove('active');
+            roomIdInput.value = '';
+            nameInput.value = '';
+            platformSelect.value = 'bilibili';
+        }
+
+        confirmBtn.addEventListener('click', async () => {
+            const platform = platformSelect.value;
+            const roomId = roomIdInput.value.trim();
+            const name = nameInput.value.trim();
+            if (!roomId) {
+                roomIdInput.style.borderColor = '#ff4444';
+                setTimeout(() => roomIdInput.style.borderColor = '', 800);
+                return;
+            }
+            const p = platforms[platform];
+            await window.electronAPI.addStreamer({
+                platform,
+                roomId,
+                name: name || '',
+                url: p.baseUrl ? p.baseUrl + roomId : ''
+            });
+            closeAddModal();
+            await loadStreamers();
+        });
+
+        roomIdInput.addEventListener('keypress', e => { if (e.key === 'Enter') confirmBtn.click(); });
+        nameInput.addEventListener('keypress', e => { if (e.key === 'Enter') confirmBtn.click(); });
+
+        window.electronAPI.onStatusUpdate(updated => {
+            allStreamers = updated;
+            renderList();
+        });
+
+        window.electronAPI.onTopStatus(isTop => {
+            pinBtn.classList.toggle('pinned', isTop);
+            pinBtn.title = isTop ? t('pinTitlePinned') : t('pinTitleUnpinned');
+        });
+
+        document.getElementById('minBtn').addEventListener('click', () => window.electronAPI.windowControl('minimize'));
+        document.getElementById('closeBtn').addEventListener('click', () => window.electronAPI.windowControl('close'));
+        pinBtn.addEventListener('click', () => window.electronAPI.windowControl('toggle-top'));
+
+        // ==================== Init ====================
+        async function init() {
+            await loadSettings();
+            await loadStreamers();
+        }
+        init();
+    </script>
+</body>
+</html>

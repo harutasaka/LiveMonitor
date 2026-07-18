@@ -1,0 +1,18 @@
+directories:
+  output: ./
+  buildResources: build
+appId: com.livemonitor.app
+productName: LiveMonitor
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+files:
+  - filter:
+      - main.js
+      - preload.js
+      - index.html
+      - LiveMonitor.ico
+artifactName: ${productName}.exe
+win:
+  target: portable
+  icon: LiveMonitor.ico
+electronVersion: 43.1.1

@@ -1,0 +1,36 @@
+{
+  "author": "harutasaka",
+  "name": "live-monitor",
+  "version": "0.0.1",
+  "description": "LiveMonitor Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win && powershell -Command Remove-Item -Recurse -Force win-unpacked"
+  },
+  "build": {
+    "appId": "com.livemonitor.app",
+    "productName": "LiveMonitor",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "directories": {
+      "output": "./"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "LiveMonitor.ico"
+    ],
+    "artifactName": "${productName}.exe",
+    "win": {
+      "target": "portable",
+      "icon": "LiveMonitor.ico"
+    }
+  },
+  "devDependencies": {
+    "electron": "43.1.1",
+    "electron-builder": "^25.1.8"
+  }
+}
